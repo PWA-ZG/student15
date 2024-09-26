@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <title>Lab5</title>
+
+  <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16x16.png">
+  <link rel="manifest" href="/manifest.json" />
+
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: start;
+      min-height: 100vh;
+      margin: 0;
+      overflow: auto;
+    }
+
+    h1, p{
+      text-align: center;
+      margin: 10px;
+      font-size: 48px;
+    }
+    #toggleRecognition, #saveText, #btnEnableNotifications {
+      width: 25%;
+      text-align: center;
+      margin: 10px;
+      font-size: 24px;
+    }
+    #textInput {
+      text-align: center;
+      margin: 10px;
+      font-size: 36px;
+      width: 50%;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Lab 5</h1>
+  <p>Lab 5 - PWA</p>
+
+  <button id="toggleRecognition">Start Speech Recognition</button>
+
+  <label for="textInput"></label><textarea id="textInput" placeholder="Your text goes here"></textarea>
+
+  <button id="saveText">Save text to server</button>
+
+  <button id="btnEnableNotifications">
+    Subscribe to notifications
+  </button>
+
+  <h1>Notes</h1>
+  <div id="notes" style="text-align: center">
+    <template id="noteTemplate">
+      <div style="border: 3px dotted blue; margin: 15px; text-align: center">
+        <p id="note-content"></p>
+      </div>
+    </template>
+  </div>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/service-worker.js', { type: "module" })
+              .then((registration) => {
+                console.log('Service Worker registered with scope:', registration.scope);
+              })
+              .catch((error) => {
+                console.error('Service Worker registration failed:', error);
+              });
+    }
+    fetch("/notes")
+            .then((res) => {
+              console.log("res", res);
+              if (res.ok) {
+                res.json().then((data) => {
+                  console.log("data", data);
+                  data.notes.forEach((note) => {
+                    console.log("appending", note);
+                    let snapsDiv = document.querySelector("#notes");
+                    let template = document.querySelector("#noteTemplate");
+                    let clone = template.content.cloneNode(true);
+
+                    let body = clone.querySelector("#note-content");
+
+                    body.textContent = note.text
+                    snapsDiv.appendChild(clone);
+                  });
+                });
+              }
+            })
+            .catch((err) => {
+              console.log(err);
+            });
+  </script>
+
+  <script type="module">
+    import {set} from "/idb-keyval.js";
+
+    let input = document.getElementById("textInput");
+
+    document.getElementById("saveText").addEventListener('click', (event) =>{
+      event.preventDefault();
+      if ("serviceWorker" in navigator && "SyncManager" in window) {
+        let text = input.value
+        if(text === ''){
+          alert("You must first enter some text")
+          return
+        }
+        set(text, {
+          text: text,
+        });
+
+        navigator.serviceWorker.ready
+                .then((swRegistration)=>{
+                  return swRegistration.sync.register("syncData")
+                })
+                .then(() => {
+                  console.log("Queued for sync");
+                })
+                .catch((error) => {
+                  alert(error);
+                  console.log(error);
+                });
+      }
+      else {
+        alert("TODO - vaš preglednik ne podržava backgound sync");
+      }
+    })
+
+    if ('webkitSpeechRecognition' in window) {
+      const recognition = new webkitSpeechRecognition();
+      const toggleRecognitionButton = document.getElementById('toggleRecognition');
+      const textInput = document.getElementById('textInput');
+      let currentText = '';
+
+      let isListening = false;
+
+      recognition.lang = 'en-US';
+      recognition.continuous = true;
+
+      recognition.onresult = (event) => {
+        const last = event.results.length - 1;
+        const recognizedText = event.results[last][0].transcript;
+        currentText += `${recognizedText}`;
+        textInput.value = currentText;
+      };
+
+      toggleRecognitionButton.addEventListener('click', () => {
+        if (isListening) {
+          recognition.stop();
+          toggleRecognitionButton.innerText = 'Start Speech Recognition';
+        } else {
+          recognition.start();
+          textInput.value = '';
+          currentText = '';
+          toggleRecognitionButton.innerText = 'Stop Speech Recognition';
+        }
+
+        isListening = !isListening;
+      });
+
+      textInput.addEventListener('input', () => {
+        currentText = textInput.value;
+      });
+    } else {
+      document.getElementById('toggleRecognition').style.display = 'none';
+    }
+  </script>
+
+  <script src="push.js"></script>
+
+</body>
+
+</html>
